@@ -8,6 +8,9 @@ from audio_recorder_streamlit import audio_recorder
 import base64
 from io import BytesIO
 import fitz  # PyMuPDF for PDF processing
+from sentence_transformers import SentenceTransformer
+import faiss
+import numpy as np
 
 # Function to convert file to base64
 def get_image_base64(image_raw):
@@ -39,9 +42,26 @@ def extract_text_from_pdf(file_path):
             text += page.get_text()
     return text
 
-# Load the PDF text when the app starts
+# Step 1: Extract the text from the PDF
 pdf_file_path = "uploads/text.pdf"
 extracted_text = extract_text_from_pdf(pdf_file_path)
+
+# Step 2: Convert text into embeddings
+model = SentenceTransformer('all-MiniLM-L6-v2')
+sentences = extracted_text.split('\n')  # Split text into sentences/paragraphs
+embeddings = model.encode(sentences)
+
+# Step 3: Create a FAISS index and add embeddings
+embedding_dimension = embeddings.shape[1]
+index = faiss.IndexFlatL2(embedding_dimension)
+index.add(np.array(embeddings))
+
+# Function to query the vector database
+def query_vector_db(query, top_k=5):
+    query_embedding = model.encode([query])
+    distances, indices = index.search(query_embedding, top_k)
+    results = [sentences[idx] for idx in indices[0]]
+    return results
 
 def messages_to_gemini(messages):
     gemini_messages = []
@@ -281,10 +301,13 @@ def main():
                 with st.chat_message("user"):
                     st.audio(f"audio_{audio_id}.wav")
 
-            # Generate response based on the extracted PDF text
-            response = f"Searching for relevant information in the document: {user_query}"
-            # Implement your logic to query the extracted_text and generate a meaningful response.
-
+            # Step 1: Query the vector database for relevant text from the PDF
+            relevant_texts = query_vector_db(user_query)
+            
+            # Step 2: Combine the relevant text with a response template
+            response = f"Relevant information from the document:\n\n" + "\n".join(relevant_texts)
+            
+            # Add this combined response to the messages
             st.session_state.messages.append(
                 {
                     "role": "assistant",
@@ -292,9 +315,11 @@ def main():
                 }
             )
 
+            # Display the assistant's response
             with st.chat_message("assistant"):
                 st.write(response)
 
+            # Step 3: Generate an additional response from the LLM, if necessary
             with st.chat_message("assistant"):
                 model2key = {
                     "google": google_api_key,
