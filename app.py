@@ -7,6 +7,7 @@ import google.generativeai as genai
 from audio_recorder_streamlit import audio_recorder
 import base64
 from io import BytesIO
+import fitz  # PyMuPDF for PDF processing
 
 # Function to convert file to base64
 def get_image_base64(image_raw):
@@ -29,6 +30,18 @@ google_models = [
     "gemini-1.5-flash",
     "gemini-1.5-pro",
 ]
+
+# Function to extract text from a PDF
+def extract_text_from_pdf(file_path):
+    with fitz.open(file_path) as doc:
+        text = ""
+        for page in doc:
+            text += page.get_text()
+    return text
+
+# Load the PDF text when the app starts
+pdf_file_path = "uploads/text.pdf"
+extracted_text = extract_text_from_pdf(pdf_file_path)
 
 def messages_to_gemini(messages):
     gemini_messages = []
@@ -84,7 +97,6 @@ def stream_llm_response(model_params, model_type="google", api_key=None):
             yield chunk_text
 
 def main():
-
     # --- Page Config ---
     st.set_page_config(
         page_title="Mozarella",
@@ -97,7 +109,6 @@ def main():
     st.html("""<h1 style="text-align: center; color: #6ca395;">🤖 <i>Mozarella</i> 💬</h1>""")
 
     # --- Main Content ---
-    # Checking if the user has introduced the Google API Key, if not, a warning is displayed
     google_api_key = os.getenv("GOOGLE_API_KEY") if os.getenv("GOOGLE_API_KEY") is not None else ""
     if google_api_key == "" or google_api_key is None:
         st.write("#")
@@ -114,7 +125,7 @@ def main():
         if "messages" not in st.session_state:
             st.session_state.messages = []
 
-        # Displaying the previous messages if there are any
+        # Display previous messages if there are any
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 for content in message["content"]:
@@ -127,9 +138,8 @@ def main():
                     elif content["type"] == "audio_file":
                         st.audio(content["audio_file"])
 
-        # Side bar model options and inputs
+        # Sidebar Model Options and Inputs
         with st.sidebar:
-
             st.divider()
             
             available_models = google_models if google_api_key else []
@@ -250,26 +260,40 @@ def main():
                 audio_file_added = True
 
         # Chat input
-        if prompt := st.chat_input("Hi! Ask me anything...") or audio_prompt or audio_file_added:
+        if user_query := st.chat_input("Hi! Ask me anything...") or audio_prompt or audio_file_added:
             if not audio_file_added:
                 st.session_state.messages.append(
                     {
                         "role": "user", 
                         "content": [{
                             "type": "text",
-                            "text": prompt or audio_prompt,
+                            "text": user_query or audio_prompt,
                         }]
                     }
                 )
                 
                 # Display the new messages
                 with st.chat_message("user"):
-                    st.markdown(prompt)
+                    st.markdown(user_query)
 
             else:
                 # Display the audio file
                 with st.chat_message("user"):
                     st.audio(f"audio_{audio_id}.wav")
+
+            # Generate response based on the extracted PDF text
+            response = f"Searching for relevant information in the document: {user_query}"
+            # Implement your logic to query the extracted_text and generate a meaningful response.
+
+            st.session_state.messages.append(
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": response}]
+                }
+            )
+
+            with st.chat_message("assistant"):
+                st.write(response)
 
             with st.chat_message("assistant"):
                 model2key = {
@@ -283,5 +307,5 @@ def main():
                     )
                 )
 
-if __name__=="__main__":
-    main()              
+if __name__ == "__main__":
+    main()
