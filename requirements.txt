@@ -60,6 +60,7 @@ packaging
 pandas
 parso
 pillow
+pinecone-client
 platformdirs
 prompt-toolkit
 proto-plus
@@ -73,6 +74,7 @@ pydantic
 pydantic_core
 pydeck
 Pygments
+PyMuPDF
 pyparsing
 python-dateutil
 python-dotenv
